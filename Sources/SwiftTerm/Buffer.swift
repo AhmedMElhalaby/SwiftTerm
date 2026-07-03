@@ -499,13 +499,16 @@ public final class Buffer {
             }
         }
         
-        if isReflowEnabled {
-            reflow (newCols, newRows)
-            // Trim the end of the line off if cols shrunk
-            if cols > newCols {
-                for i in 0..<lines.maxLength {
-                    lines [i].resize (cols: newCols, fillData: CharData.Null)
-                }
+        // Ainkrad patch: line-reflow disabled. SwiftTerm's re-wrap
+        // (reflowWider/reflowNarrower) duplicates output when a terminal is
+        // resized. Widening already padded every line to `newCols` above; on
+        // shrink we trim every line to `newCols` here. So the buffer stays
+        // valid (all lines == newCols, satisfying the post-condition below)
+        // and scrollback is preserved — existing lines simply are not
+        // re-wrapped to the new width.
+        if cols > newCols {
+            for i in 0..<lines.maxLength {
+                lines [i].resize (cols: newCols, fillData: CharData.Null)
             }
         }
         
