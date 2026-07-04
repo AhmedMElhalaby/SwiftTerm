@@ -64,4 +64,13 @@ final class MouseReportTests {
         t.sendEvent(buttonFlags: rel, x: 0, y: 0, pixelX: 0, pixelY: 0, release: true)
         #expect(d.sentData.last == Array("\(esc)[M".utf8) + [35, 33, 33])
     }
+
+    @Test("X10 tracking sends presses only; vt200 sends releases; off sends nothing")
+    func buttonReleasePredicateByMode() {
+        #expect(Terminal.MouseMode.off.sendButtonRelease() == false)
+        #expect(Terminal.MouseMode.x10.sendButtonRelease() == false)
+        #expect(Terminal.MouseMode.vt200.sendButtonRelease() == true)
+        #expect(Terminal.MouseMode.buttonEventTracking.sendButtonRelease() == true)
+        #expect(Terminal.MouseMode.anyEvent.sendButtonRelease() == true)
+    }
 }
