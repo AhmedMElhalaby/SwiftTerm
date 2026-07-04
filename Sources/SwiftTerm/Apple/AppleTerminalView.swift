@@ -1322,6 +1322,14 @@ extension TerminalView {
                                 rect.size.width = frame.width - rect.origin.x
                             }
 
+                            // Mirror the right-edge extend on the left: fill the
+                            // left inset strip with the first run's background so
+                            // the padding is the terminal background, not a gap.
+                            if startColumn == 0 {
+                                rect.size.width += rect.origin.x
+                                rect.origin.x = 0
+                            }
+
                             #if os(macOS)
                             backgroundColor.setFill()
                             rect.fill()
