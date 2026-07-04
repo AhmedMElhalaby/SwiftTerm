@@ -1183,7 +1183,7 @@ extension TerminalView {
             }
             let renderMode = displayBuffer.lines [row].renderMode
             let lineOffset = calcLineOffset(forRow: row)
-            let lineOrigin = CGPoint(x: 0, y: frame.height - lineOffset)
+            let lineOrigin = CGPoint(x: contentHInset, y: frame.height - lineOffset)
             
             switch renderMode {
             case .single:
@@ -1563,7 +1563,22 @@ extension TerminalView {
         }
 #endif
     }
-    
+
+    /// Horizontal inset that centers the fixed-width cell grid within the view,
+    /// so left and right padding match. The grid is `cols * cellWidth` wide; the
+    /// leftover view width (which today all sits on the right, since cols are
+    /// computed from width minus the reserved scrollbar) is split evenly.
+    /// macOS-only; other platforms keep a flush-left origin.
+    var contentHInset: CGFloat {
+        #if os(macOS)
+        guard let cellDimension, let terminal else { return 0 }
+        let gridWidth = CGFloat(terminal.cols) * cellDimension.width
+        return max(0, ((frame.width - gridWidth) / 2).rounded(.down))
+        #else
+        return 0
+        #endif
+    }
+
     /// Update visible area
     func updateDisplay (notifyAccessibility: Bool)
     {
@@ -1679,7 +1694,7 @@ extension TerminalView {
         let lineOrigin = CGPoint(x: 0, y: offset)
         #else
         let offset = (cellDimension.height * (CGFloat(buffer.y-(buffer.yDisp-buffer.yBase)+1)))
-        let lineOrigin = CGPoint(x: 0, y: frame.height - offset)
+        let lineOrigin = CGPoint(x: contentHInset, y: frame.height - offset)
         #endif
         caretView.frame.origin = CGPoint(x: lineOrigin.x + (cellDimension.width * doublePosition * CGFloat(buffer.x)), y: lineOrigin.y)
         caretView.setText (ch: buffer.lines [vy][buffer.x])
