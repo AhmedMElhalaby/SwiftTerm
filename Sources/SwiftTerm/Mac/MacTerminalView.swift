@@ -240,6 +240,7 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
         setupOptions()
         setupProgressBar()
         setupFocusNotification()
+        registerForDraggedTypes([.fileURL])
     }
 
 #if canImport(MetalKit)
@@ -1924,15 +1925,59 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
     }
     
     func cut (sender: Any?) {}
-    
+
+    /// Backslash-escapes shell-significant characters so a file path pastes/drops
+    /// as a single shell token — matching Terminal.app/iTerm drag-insert behavior.
+    static func shellEscape(_ path: String) -> String {
+        let needsEscape = Set<Character>(" \t\n\"'`$&|;<>()[]{}*?!#~\\")
+        var result = ""
+        result.reserveCapacity(path.count)
+        for ch in path {
+            if needsEscape.contains(ch) { result.append("\\") }
+            result.append(ch)
+        }
+        return result
+    }
+
+    /// Space-joined shell-escaped paths for a set of dropped/pasted file URLs.
+    static func filePasteText(for urls: [URL]) -> String {
+        urls.map { shellEscape($0.path) }.joined(separator: " ")
+    }
+
     @objc
     open func paste(_ sender: Any)
     {
         let clipboard = NSPasteboard.general
-        let text = clipboard.string(forType: .string)
-        insertText(text ?? "", replacementRange: NSRange(location: 0, length: 0), isPaste: true)
+        if let text = clipboard.string(forType: .string), !text.isEmpty {
+            insertText(text, replacementRange: NSRange(location: 0, length: 0), isPaste: true)
+            return
+        }
+        // No plain text — a file copied in Finder arrives as file URLs; paste its path(s).
+        if let urls = clipboard.readObjects(forClasses: [NSURL.self],
+                                            options: [.urlReadingFileURLsOnly: true]) as? [URL],
+           !urls.isEmpty {
+            insertText(TerminalView.filePasteText(for: urls),
+                       replacementRange: NSRange(location: 0, length: 0), isPaste: true)
+            return
+        }
+        insertText("", replacementRange: NSRange(location: 0, length: 0), isPaste: true)
     }
-    
+
+    open override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        let canRead = sender.draggingPasteboard.canReadObject(
+            forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true])
+        return canRead ? .copy : []
+    }
+
+    open override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        guard let urls = sender.draggingPasteboard.readObjects(
+                forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
+              !urls.isEmpty else { return false }
+        insertText(TerminalView.filePasteText(for: urls),
+                   replacementRange: NSRange(location: 0, length: 0), isPaste: true)
+        return true
+    }
+
     @objc
     open func copy(_ sender: Any)
     {
