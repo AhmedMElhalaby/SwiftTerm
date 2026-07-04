@@ -579,7 +579,7 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
         terminalDelegate?.send (source: self, data: data)
     }
         
-    private var scrollerWidth: CGFloat {
+    var scrollerWidth: CGFloat {
         NSScroller.scrollerWidth(for: .regular, scrollerStyle: scrollerStyle)
     }
 
@@ -593,7 +593,9 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
 
     func getEffectiveWidth (size: CGSize) -> CGFloat
     {
-        return (size.width - scrollerWidth)
+        // Reserve the scrollbar width on the right AND the matching left inset,
+        // so columns fit between symmetric left/right padding.
+        return (size.width - scrollerWidth - contentHInset)
     }
     
     open func scrolled(source terminal: Terminal, yDisp: Int) {

@@ -1571,9 +1571,9 @@ extension TerminalView {
     /// macOS-only; other platforms keep a flush-left origin.
     var contentHInset: CGFloat {
         #if os(macOS)
-        guard let cellDimension, let terminal else { return 0 }
-        let gridWidth = CGFloat(terminal.cols) * cellDimension.width
-        return max(0, ((frame.width - gridWidth) / 2).rounded(.down))
+        // Match the left padding to the scrollbar width reserved on the right,
+        // so both sides have equal padding without shrinking the right gap.
+        return scrollerWidth
         #else
         return 0
         #endif
