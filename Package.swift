@@ -16,6 +16,8 @@ import Foundation
 //    64/65 when the app requests mouse; X10 tracking is press-only.
 //  - Restored a dependency-free SwiftTermTests target (library-only trim
 //    had dropped it) so the fork's own suite runs.
+//  - File drag-drop and paste: dropping a file, or pasting a file copied in
+//    Finder, inserts its shell-escaped path at the cursor.
 
 #if os(Linux) || os(Windows)
 let platformExcludes = ["Apple", "Mac", "iOS"]
