@@ -35,6 +35,11 @@ let package = Package(
             resources: [
                 .process("Apple/Metal/Shaders.metal")
             ]
+        ),
+        .testTarget(
+            name: "SwiftTermTests",
+            dependencies: ["SwiftTerm"],
+            path: "Tests/SwiftTermTests"
         )
     ],
     swiftLanguageVersions: [.v5]
