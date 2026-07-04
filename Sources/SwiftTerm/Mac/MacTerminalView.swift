@@ -1993,8 +1993,9 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
         let displayBuffer = terminal.displayBuffer
         let hit = calculateMouseHit(with: event)
         let buttonFlags = encodeMouseEvent(with: event)
+        let release = [NSEvent.EventType.leftMouseUp, .otherMouseUp, .rightMouseUp].contains(event.type)
         let screenRow = max (0, min (displayBuffer.rows - 1, hit.grid.row - displayBuffer.yDisp))
-        terminal.sendEvent(buttonFlags: buttonFlags, x: hit.grid.col, y: screenRow, pixelX: hit.pixels.col, pixelY: hit.pixels.row)
+        terminal.sendEvent(buttonFlags: buttonFlags, x: hit.grid.col, y: screenRow, pixelX: hit.pixels.col, pixelY: hit.pixels.row, release: release)
     }
     
     private var autoScrollDelta = 0
@@ -2075,11 +2076,11 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
         let mouseHit = calculateMouseHit(with: event)
         let hit = mouseHit.grid
         if allowMouseReporting {
-            if terminal.mouseMode.sendMotionEvent() {
+            if terminal.mouseMode.sendButtonTracking() {
                 let flags = encodeMouseEvent(with: event)
                 let screenRow = max (0, min (displayBuffer.rows - 1, hit.row - displayBuffer.yDisp))
                 terminal.sendMotion(buttonFlags: flags, x: hit.col, y: screenRow, pixelX: mouseHit.pixels.col, pixelY: mouseHit.pixels.row)
-            
+
                 return
             }
             if terminal.mouseMode != .off {
@@ -2216,21 +2217,36 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
         updateHoverLink(at: hit.grid)
         
         if terminal.mouseMode.sendMotionEvent() {
-            let flags = encodeMouseEvent(with: event, overwriteRelease: true)
+            // No button held during a plain move → "no button" code (3).
+            let flags = terminal.encodeButton(button: 3, release: false,
+                                              shift: false, meta: false, control: false)
             terminal.sendMotion(buttonFlags: flags, x: hit.grid.col, y: hit.grid.row, pixelX: hit.pixels.col, pixelY: hit.pixels.row)
         }
     }
     
     public override func scrollWheel(with event: NSEvent) {
-        if event.deltaY == 0 {
+        if event.deltaY == 0 { return }
+
+        // When the app requested mouse tracking, deliver the wheel as SGR wheel
+        // buttons (64 up / 65 down) so TUI apps in the alternate screen scroll.
+        if allowMouseReporting && terminal.mouseMode != .off {
+            let hit = calculateMouseHit(with: event)
+            let button = event.deltaY > 0 ? 4 : 5
+            let ticks = calcScrollingVelocity(delta: Int(abs(event.deltaY)))
+            let flags = terminal.encodeButton(button: button, release: false,
+                                              shift: false, meta: false, control: false)
+            let screenRow = max(0, min(terminal.rows - 1, hit.grid.row - terminal.buffer.yDisp))
+            for _ in 0..<max(1, min(ticks, terminal.rows)) {
+                terminal.sendEvent(buttonFlags: flags, x: hit.grid.col, y: screenRow, pixelX: hit.pixels.col, pixelY: hit.pixels.row, release: false)
+            }
             return
         }
-        let velocity = calcScrollingVelocity(delta: Int (abs (event.deltaY)))
-        if event.deltaY > 0 {
-            scrollUp (lines: velocity)
-        } else {
-            scrollDown(lines: velocity)
-        }
+
+        // Otherwise scroll our own scrollback — but only for the normal buffer;
+        // the alternate screen has no scrollback to move.
+        if terminal.isCurrentBufferAlternate { return }
+        let velocity = calcScrollingVelocity(delta: Int(abs(event.deltaY)))
+        if event.deltaY > 0 { scrollUp(lines: velocity) } else { scrollDown(lines: velocity) }
     }
     
     private func calcScrollingVelocity (delta: Int) -> Int

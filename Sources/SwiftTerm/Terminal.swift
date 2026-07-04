@@ -5587,7 +5587,9 @@ open class Terminal {
     /**
      * Encodes the button action in the format expected by the client
      * - Parameter button: The button to encode
-     * - Parameter release: `true` if this is a mouse release event
+     * - Parameter release: retained for source compatibility; release is now
+     *   conveyed to sendEvent/sendMotion (legacy protocols encode it as button
+     *   code 3 inside sendEvent, not here).
      * - Parameter shift: `true` if the shift key is pressed
      * - Parameter meta: `true` if the meta/alt key is pressed
      * - Parameter control: `true` if the control key is pressed
