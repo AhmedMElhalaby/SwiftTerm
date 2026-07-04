@@ -5596,25 +5596,20 @@ open class Terminal {
     public func encodeButton (button: Int, release: Bool, shift: Bool, meta: Bool, control: Bool) -> Int
     {
         var value: Int
-
-        if release {
-            value = 3
-        } else {
-            switch (button) {
-            case 0:
-                value = 0
-            case 1:
-                value = 1
-            case 2:
-                value = 2
-            case 4:
-                value = 64
-            case 5:
-                value = 65
-            default:
-                value = 0
-            }
+        switch button {
+        case 0: value = 0
+        case 1: value = 1
+        case 2: value = 2
+        case 3: value = 3        // "no button" — any-event motion reports
+        case 4: value = 64
+        case 5: value = 65
+        default: value = 0
         }
+        // `release` is retained for API/source compatibility; release is now
+        // conveyed explicitly to sendEvent/sendMotion. Legacy protocols still
+        // encode release as button code 3 — done inside sendEvent's legacy
+        // branches, not here.
+        _ = release
         if mouseMode.sendsModifiers() {
             if shift {
                 value |= 4
@@ -5630,42 +5625,42 @@ open class Terminal {
     }
     
     public func sendEvent (buttonFlags: Int, x: Int, y: Int) {
-      sendEvent(buttonFlags: buttonFlags, x: x, y: y, pixelX: x, pixelY: y)
+      sendEvent(buttonFlags: buttonFlags, x: x, y: y, pixelX: x, pixelY: y, release: (buttonFlags & 3) == 3)
     }
-    
+
+    public func sendEvent (buttonFlags: Int, x: Int, y: Int, pixelX: Int, pixelY: Int) {
+      sendEvent(buttonFlags: buttonFlags, x: x, y: y, pixelX: pixelX, pixelY: pixelY, release: (buttonFlags & 3) == 3)
+    }
+
     /**
-     * Sends a mouse event for a specific button at the specific location
-     * - Parameter buttonFlags: Button flags encoded in Cb mode.
-     * - Parameter x: X coordinate for the event
-     * - Parameter y: Y coordinate for the event
+     * Sends a mouse event. `release` selects SGR's `m` vs `M`; legacy protocols
+     * carry release as button code 3, reconstructed here.
      */
-    public func sendEvent (buttonFlags: Int, x: Int, y: Int, pixelX: Int, pixelY: Int)
+    public func sendEvent (buttonFlags: Int, x: Int, y: Int, pixelX: Int, pixelY: Int, release: Bool)
     {
-        //print ("got \(mouseProtocol)")
         switch mouseProtocol {
         case .x10:
-            sendResponse(cc.CSI, "M", [UInt8(buttonFlags+32), min (UInt8(255), UInt8(32 + x+1)), min (UInt8(255), UInt8(32+y+1))])
+            let cb = release ? ((buttonFlags & ~3) | 3) : buttonFlags
+            sendResponse(cc.CSI, "M", [UInt8(cb+32), min (UInt8(255), UInt8(32 + x+1)), min (UInt8(255), UInt8(32+y+1))])
         case .sgr:
-            let bflags : Int = ((buttonFlags & 3) == 3) ? (buttonFlags & ~3) : buttonFlags
-            let m = ((buttonFlags & 3) == 3) ? "m" : "M"
-            sendResponse(cc.CSI, "<\(bflags);\(x+1);\(y+1)\(m)")
+            let m = release ? "m" : "M"
+            sendResponse(cc.CSI, "<\(buttonFlags);\(x+1);\(y+1)\(m)")
         case .sgrPixel:
-            let bflags : Int = ((buttonFlags & 3) == 3) ? (buttonFlags & ~3) : buttonFlags
-            let m = ((buttonFlags & 3) == 3) ? "m" : "M"
-            print ("\(pixelX);\(pixelY)")
-            sendResponse(cc.CSI, "<\(bflags);\(pixelX);\(pixelY)\(m)")
-            
+            let m = release ? "m" : "M"
+            sendResponse(cc.CSI, "<\(buttonFlags);\(pixelX);\(pixelY)\(m)")
         case .urxvt:
-            sendResponse(cc.CSI, "\(buttonFlags+32);\(x+1);\(y+1)M");
+            let cb = release ? ((buttonFlags & ~3) | 3) : buttonFlags
+            sendResponse(cc.CSI, "\(cb+32);\(x+1);\(y+1)M");
         case .utf8:
+            let cb = release ? ((buttonFlags & ~3) | 3) : buttonFlags
             var buffer: [UInt8] = [UInt8 (ascii: "M")]
-            encodeMouseUtf(data: &buffer, ch: buttonFlags+32)
+            encodeMouseUtf(data: &buffer, ch: cb+32)
             encodeMouseUtf (data: &buffer, ch: x+33)
             encodeMouseUtf (data: &buffer, ch: y+33)
             sendResponse(cc.CSI, buffer)
         }
     }
-    
+
     /**
      * Sends a mouse motion event for a specific button at the specific location
      * - Parameter buttonFlags: Button flags encoded in Cb mode.
@@ -5674,7 +5669,7 @@ open class Terminal {
      */
     public func sendMotion (buttonFlags: Int, x: Int, y: Int, pixelX: Int, pixelY: Int)
     {
-        sendEvent(buttonFlags: buttonFlags+32, x: x, y: y, pixelX: pixelX, pixelY: pixelY)
+        sendEvent(buttonFlags: buttonFlags+32, x: x, y: y, pixelX: pixelX, pixelY: pixelY, release: false)
     }
     
     static var matchColorCache : [Int:Int] = [:]
