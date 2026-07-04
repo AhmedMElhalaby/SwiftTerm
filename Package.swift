@@ -8,6 +8,14 @@ import Foundation
 // docc-plugin, package-benchmark); Ainkrad consumes only the SwiftTerm
 // library, and those extra deps drift into tool-version-incompatible releases.
 // Trimming to the library keeps dependency resolution trivial and stable.
+//
+// Additional Ainkrad patches:
+//  - Mouse reporting: release is explicit through sendEvent/sendMotion;
+//    SGR emits m only on real release (no button-code inference); hover
+//    motion uses the no-button code (3); wheel is delivered as buttons
+//    64/65 when the app requests mouse; X10 tracking is press-only.
+//  - Restored a dependency-free SwiftTermTests target (library-only trim
+//    had dropped it) so the fork's own suite runs.
 
 #if os(Linux) || os(Windows)
 let platformExcludes = ["Apple", "Mac", "iOS"]
