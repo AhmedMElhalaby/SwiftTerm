@@ -3,108 +3,16 @@
 import PackageDescription
 import Foundation
 
+// Ainkrad fork: library-only. The upstream package also builds fuzz/termcast/
+// benchmark executables and their external dependencies (argument-parser,
+// docc-plugin, package-benchmark); Ainkrad consumes only the SwiftTerm
+// library, and those extra deps drift into tool-version-incompatible releases.
+// Trimming to the library keeps dependency resolution trivial and stable.
+
 #if os(Linux) || os(Windows)
 let platformExcludes = ["Apple", "Mac", "iOS"]
 #else
 let platformExcludes: [String] = []
-#endif
-
-let isGitHubActions = ProcessInfo.processInfo.environment["GITHUB_ACTIONS"] == "true"
-let benchmarkDependencies: [Package.Dependency] = isGitHubActions ? [] : [
-    .package(url: "https://github.com/ordo-one/package-benchmark", .upToNextMajor(from: "1.29.11"))
-]
-
-#if os(Windows)
-let products: [Product] = [
-    .executable(name: "SwiftTermFuzz", targets: ["SwiftTermFuzz"]),
-    .library(
-        name: "SwiftTerm",
-        targets: ["SwiftTerm"]
-    ),
-]
-
-let targets: [Target] = [
-    .target(
-        name: "SwiftTerm",
-        dependencies: [],
-        path: "Sources/SwiftTerm",
-        exclude: platformExcludes + ["Mac/README.md"]
-//        swiftSettings: [
-//            .unsafeFlags(["-enforce-exclusivity=none"])
-//        ]
-    ),
-    .executableTarget (
-        name: "SwiftTermFuzz",
-        dependencies: ["SwiftTerm"],
-        path: "Sources/SwiftTermFuzz"
-    ),
-    .testTarget(
-        name: "SwiftTermTests",
-        dependencies: ["SwiftTerm"],
-        path: "Tests/SwiftTermTests"
-    )
-]
-#else
-let products: [Product] = [
-    .executable(name: "SwiftTermFuzz", targets: ["SwiftTermFuzz"]),
-    .executable(name: "termcast", targets: ["Termcast"]),
-    .library(
-        name: "SwiftTerm",
-        targets: ["SwiftTerm"]
-    ),
-]
-
-let benchmarkTargets: [Target] = isGitHubActions ? [] : [
-    .executableTarget(
-        name: "SwiftTermBenchmarks",
-        dependencies: [
-            "SwiftTerm",
-            .product(name: "Benchmark", package: "package-benchmark")
-        ],
-        path: "Benchmarks/SwiftTermBenchmarks",
-        plugins: [
-            .plugin(name: "BenchmarkPlugin", package: "package-benchmark")
-        ]
-    )
-]
-
-let targets: [Target] = [
-    .target(
-        name: "SwiftTerm",
-        //
-        // We can not use Swift Subprocess, because there is no way of configuring the child process to
-        // be a controlling terminal, as it is posix-spawn based.
-//        dependencies: [
-//            .product(name: "Subprocess", package: "swift-subprocess", condition: .when(platforms: [.macOS, .linux]))
-//        ],
-        path: "Sources/SwiftTerm",
-        exclude: platformExcludes + ["Mac/README.md"],
-        resources: [
-            .process("Apple/Metal/Shaders.metal")
-        ]
-//        swiftSettings: [
-//            .unsafeFlags(["-enforce-exclusivity=none"])
-//        ]
-    ),
-    .executableTarget (
-        name: "SwiftTermFuzz",
-        dependencies: ["SwiftTerm"],
-        path: "Sources/SwiftTermFuzz"
-    ),
-    .executableTarget (
-        name: "Termcast",
-        dependencies: [
-            "SwiftTerm",
-            .product(name: "ArgumentParser", package: "swift-argument-parser")
-        ],
-        path: "Sources/Termcast"
-    ),
-    .testTarget(
-        name: "SwiftTermTests",
-        dependencies: ["SwiftTerm"],
-        path: "Tests/SwiftTermTests"
-    )
-] + benchmarkTargets
 #endif
 
 let package = Package(
@@ -115,12 +23,19 @@ let package = Package(
         .tvOS(.v13),
         .visionOS(.v1)
     ],
-    products: products,
-    dependencies: [
-        .package(url: "https://github.com/apple/swift-argument-parser", from: "1.0.0"),
-        .package(url: "https://github.com/apple/swift-docc-plugin", from: "1.4.3"),
-    ] + benchmarkDependencies,
-//        .package(url: "https://github.com/swiftlang/swift-subprocess", revision: "426790f3f24afa60b418450da0afaa20a8b3bdd4")
-    targets: targets,
+    products: [
+        .library(name: "SwiftTerm", targets: ["SwiftTerm"])
+    ],
+    dependencies: [],
+    targets: [
+        .target(
+            name: "SwiftTerm",
+            path: "Sources/SwiftTerm",
+            exclude: platformExcludes + ["Mac/README.md"],
+            resources: [
+                .process("Apple/Metal/Shaders.metal")
+            ]
+        )
+    ],
     swiftLanguageVersions: [.v5]
 )

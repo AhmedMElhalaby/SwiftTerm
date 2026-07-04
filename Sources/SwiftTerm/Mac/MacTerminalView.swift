@@ -143,6 +143,25 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
 
     var cellDimension: CellDimension!
     var caretView: CaretView!
+    // Ainkrad patch: coalesces machine-fast (animated / programmatic) frame
+    // changes so the shell receives a single resize at the settled size
+    // instead of a dozen SIGWINCH in ~130ms (which duplicates the prompt).
+    private var pendingSizeChangeWork: DispatchWorkItem?
+
+    /// Ainkrad patch: when set, resizes apply immediately instead of being
+    /// debounced. The app sets this on the pane that fills the Focus-Mode
+    /// canvas: its resize is a single clean snap (no animation churn to
+    /// coalesce), so debouncing only delayed the reflow and flashed an empty
+    /// strip. Flipping it true also flushes any already-pending resize at once.
+    public var applyResizeImmediately: Bool = false {
+        didSet {
+            guard applyResizeImmediately, pendingSizeChangeWork != nil, cellDimension != nil else { return }
+            pendingSizeChangeWork?.cancel()
+            pendingSizeChangeWork = nil
+            _ = processSizeChange(newSize: frame.size)
+            refreshAfterSizeChange()
+        }
+    }
     public var terminal: Terminal!
     private var progressBarView: TerminalProgressBarView?
     private var progressReportTimer: Timer?
@@ -677,7 +696,40 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
         updateScrollerFrame()
         updateProgressBarFrame()
         guard cellDimension != nil else { return }
-        _ = processSizeChange(newSize: frame.size)
+
+        // Ainkrad patch: a live window resize (`inLiveResize`) is human-paced —
+        // apply the buffer/PTY resize immediately so reflow tracks the drag.
+        //
+        // Off the live path a single frame change can be the settled size, but
+        // a layout animation (open / close / drag reflow) fires MANY frames in
+        // ~130ms AND churns through wild transient sizes (cols 3, 8, 89, …)
+        // before it settles. So we DEBOUNCE (trailing only): every frame
+        // reschedules one apply, and only the size that stands still for the
+        // window is sent to the shell. This guarantees the shell never sees a
+        // transient (which would leave a pane stuck narrow) and never gets the
+        // mid-animation SIGWINCH flood (which duplicated output). The window is
+        // a touch longer than a frame so a 60 fps burst always coalesces.
+        pendingSizeChangeWork?.cancel()
+        if inLiveResize || applyResizeImmediately {
+            _ = processSizeChange(newSize: frame.size)
+            refreshAfterSizeChange()
+        } else {
+            let work = DispatchWorkItem { [weak self] in
+                guard let self, self.cellDimension != nil else { return }
+                _ = self.processSizeChange(newSize: self.frame.size)
+                // A deferred resize MUST repaint: otherwise the last synchronous
+                // draw (of the pre-resize buffer) stays on screen — a pane that
+                // resized while idle would look stuck at its old size.
+                self.refreshAfterSizeChange()
+            }
+            pendingSizeChangeWork = work
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.04, execute: work)
+        }
+    }
+
+    /// Repaints after a buffer resize (Metal or CoreGraphics) and re-places the
+    /// caret — shared by the immediate and deferred resize paths.
+    private func refreshAfterSizeChange() {
 #if canImport(MetalKit)
         if useMetalRenderer {
             if inLiveResize && TerminalView.metalLiveResizeThrottleEnabled {
