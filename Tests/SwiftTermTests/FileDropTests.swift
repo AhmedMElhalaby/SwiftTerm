@@ -4,25 +4,25 @@ import Foundation
 
 #if os(macOS)
 final class FileDropTests {
-    @Test("shellEscape leaves a plain path unchanged")
-    func plainPathUnchanged() {
-        #expect(TerminalView.shellEscape("/Users/me/file.txt") == "/Users/me/file.txt")
+    @Test("shellQuote wraps a plain path in single quotes")
+    func plainPathQuoted() {
+        #expect(TerminalView.shellQuote("/Users/me/file.txt") == "'/Users/me/file.txt'")
     }
 
-    @Test("shellEscape backslash-escapes spaces")
-    func escapesSpaces() {
-        #expect(TerminalView.shellEscape("/Users/me/My Notes.txt") == "/Users/me/My\\ Notes.txt")
+    @Test("shellQuote keeps spaces literal inside single quotes")
+    func spacesStayLiteral() {
+        #expect(TerminalView.shellQuote("/Users/me/My Notes.txt") == "'/Users/me/My Notes.txt'")
     }
 
-    @Test("shellEscape escapes quotes and shell metacharacters")
-    func escapesMetacharacters() {
-        #expect(TerminalView.shellEscape("/tmp/a'b\"c$d.txt") == "/tmp/a\\'b\\\"c\\$d.txt")
+    @Test("shellQuote escapes an embedded single quote the POSIX way")
+    func escapesEmbeddedQuote() {
+        #expect(TerminalView.shellQuote("/tmp/a'b.txt") == "'/tmp/a'\\''b.txt'")
     }
 
-    @Test("filePasteText joins multiple escaped paths with a space")
+    @Test("filePasteText joins multiple single-quoted paths with a space")
     func joinsMultiplePaths() {
         let urls = [URL(fileURLWithPath: "/tmp/one two.txt"), URL(fileURLWithPath: "/tmp/three.txt")]
-        #expect(TerminalView.filePasteText(for: urls) == "/tmp/one\\ two.txt /tmp/three.txt")
+        #expect(TerminalView.filePasteText(for: urls) == "'/tmp/one two.txt' '/tmp/three.txt'")
     }
 }
 #endif

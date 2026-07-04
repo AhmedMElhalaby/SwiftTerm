@@ -1926,38 +1926,33 @@ open class TerminalView: NSView, NSTextInputClient, NSUserInterfaceValidations, 
     
     func cut (sender: Any?) {}
 
-    /// Backslash-escapes shell-significant characters so a file path pastes/drops
-    /// as a single shell token — matching Terminal.app/iTerm drag-insert behavior.
-    static func shellEscape(_ path: String) -> String {
-        let needsEscape = Set<Character>(" \t\n\"'`$&|;<>()[]{}*?!#~\\")
-        var result = ""
-        result.reserveCapacity(path.count)
-        for ch in path {
-            if needsEscape.contains(ch) { result.append("\\") }
-            result.append(ch)
-        }
-        return result
+    /// Wraps a file path in POSIX single quotes so it pastes/drops as a single
+    /// shell token (spaces and metacharacters stay literal). An embedded single
+    /// quote is emitted as '\'' — close, escaped quote, reopen.
+    static func shellQuote(_ path: String) -> String {
+        "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
-    /// Space-joined shell-escaped paths for a set of dropped/pasted file URLs.
+    /// Space-joined single-quoted paths for a set of dropped/pasted file URLs.
     static func filePasteText(for urls: [URL]) -> String {
-        urls.map { shellEscape($0.path) }.joined(separator: " ")
+        urls.map { shellQuote($0.path) }.joined(separator: " ")
     }
 
     @objc
     open func paste(_ sender: Any)
     {
         let clipboard = NSPasteboard.general
-        if let text = clipboard.string(forType: .string), !text.isEmpty {
-            insertText(text, replacementRange: NSRange(location: 0, length: 0), isPaste: true)
-            return
-        }
-        // No plain text — a file copied in Finder arrives as file URLs; paste its path(s).
+        // A file copied in Finder puts BOTH a file URL and the file's *name* as
+        // a plain string; prefer the URL so we paste the full path, not the name.
         if let urls = clipboard.readObjects(forClasses: [NSURL.self],
                                             options: [.urlReadingFileURLsOnly: true]) as? [URL],
            !urls.isEmpty {
             insertText(TerminalView.filePasteText(for: urls),
                        replacementRange: NSRange(location: 0, length: 0), isPaste: true)
+            return
+        }
+        if let text = clipboard.string(forType: .string) {
+            insertText(text, replacementRange: NSRange(location: 0, length: 0), isPaste: true)
             return
         }
         insertText("", replacementRange: NSRange(location: 0, length: 0), isPaste: true)
